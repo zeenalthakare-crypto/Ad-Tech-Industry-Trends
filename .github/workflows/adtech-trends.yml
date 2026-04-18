@@ -1,0 +1,120 @@
+name: Ad Tech Trends Digest
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+jobs:
+  fetch-trends:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install anthropic
+
+      - name: Create output directory
+        run: mkdir -p output/trends
+
+      - name: Run trends agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/fetch_trends.py
+
+      - name: Commit and push report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/trends/
+          git diff --staged --quiet || git commit -m "trends: $(date +%Y-%m-%d)"
+          git push
+
+5. Scroll down and click **"Commit new file"**
+
+---
+
+### File 2: `scripts/fetch_trends.py`
+
+1. Click **"Add file" → "Create new file"** again
+2. In the filename box type: `scripts/fetch_trends.py`
+3. Paste this content:
+
+```python
+import anthropic
+from datetime import date
+import os
+
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+def fetch_adtech_trends():
+    today = date.today().strftime("%B %d, %Y")
+
+    response = client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=4000,
+        tools=[{
+            "type": "web_search_20250305",
+            "name": "web_search"
+        }],
+        system="""You are a senior ad tech analyst. Identify and summarize the 
+        top 5 trends impacting advertising technology right now. For each trend include:
+        - Trend name and one-line description
+        - What is driving it
+        - Key companies involved
+        - Short-term impact (next 3-6 months)
+        - Longer-term implications
+        Format as clean markdown.""",
+        messages=[{
+            "role": "user",
+            "content": f"Today is {today}. Find the top 5 trends impacting ad tech right now. Cover: programmatic, retail media, CTV, AI in advertising, data privacy, clean rooms, DSPs/SSPs."
+        }]
+    )
+
+    text = ""
+    for block in response.content:
+        if hasattr(block, "text"):
+            text += block.text
+    return text
+
+def save_report(content):
+    os.makedirs("output/trends", exist_ok=True)
+    filename = f"output/trends/{date.today().isoformat()}.md"
+    with open(filename, "w") as f:
+        f.write(f"# Ad Tech Trends — {date.today().strftime('%B %d, %Y')}\n\n")
+        f.write(content)
+    print(f"Saved: {filename}")
+
+if __name__ == "__main__":
+    print("Fetching trends...")
+    trends = fetch_adtech_trends()
+    save_report(trends)
+    print(trends)
+```
+
+4. Click **"Commit new file"**
+
+---
+
+### Then add your API key:
+
+1. Go to **Settings → Secrets and variables → Actions**
+2. Click **"New repository secret"**
+3. Name: `ANTHROPIC_API_KEY`
+4. Value: your `sk-ant-...` key
+5. Click **"Add secret"**
+
+---
+
+### Run it:
+
+Go to **Actions → Ad Tech Trends Digest → Run workflow → Run workflow**
+
+The report will appear in `output/trends/` in your repo within a minute or two. Let me know what error you hit if anything goes wrong!
